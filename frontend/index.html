@@ -187,8 +187,8 @@
   }
   .thumb{
     position:relative;
-    width:74px;
-    height:74px;
+    width:111px;
+    height:111px;
     border-radius:4px;
     overflow:hidden;
     border:1px solid var(--border);
@@ -250,11 +250,23 @@
     border-radius:3px;
     border:1px solid var(--border);
   }
+  .analysis-options{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin:16px 0;
+    font-size:0.8rem;
+    color:var(--text-dim);
+  }
+  .analysis-options label{display:flex;align-items:center;gap:8px;cursor:pointer;}
+  .analysis-options input[type=checkbox]{accent-color:var(--amber);width:15px;height:15px;flex-shrink:0;}
+
   .stat-grid{
     display:grid;
     grid-template-columns:1fr 1fr 1fr;
     gap:10px;
   }
+  .stat-grid.zoned{grid-template-columns:1fr 1fr;}
   .stat-cell{
     font-family:'JetBrains Mono',monospace;
     font-size:0.72rem;
@@ -315,7 +327,7 @@
 
   .target-grid{
     display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(240px,1fr));
+    grid-template-columns:repeat(auto-fill, minmax(360px,1fr));
     gap:16px;
     margin-top:20px;
   }
@@ -331,7 +343,7 @@
   }
   .target-card canvas, .target-card img{
     width:100%;
-    height:130px;
+    height:195px;
     object-fit:cover;
     display:block;
   }
@@ -435,24 +447,17 @@
       <input type="file" id="refInput" accept="image/*" multiple>
       <div class="thumb-row" id="refThumbs"></div>
 
+      <div class="analysis-options">
+        <label><input type="checkbox" id="optZone"> Phân vùng theo dải sáng (Shadows/Mid/Highlights)</label>
+        <label><input type="checkbox" id="optLch"> Chuyển sang không gian LCh (Chroma/Hue)</label>
+        <label><input type="checkbox" id="optHistogram"> Khớp theo histogram/CDF (thay vì chỉ mean/std)</label>
+      </div>
+
       <button class="primary" id="analyzeBtn" disabled>Phân tích phong cách</button>
 
       <div class="analysis hidden" id="analysisBlock">
         <div class="swatches" id="swatches"></div>
-        <div class="stat-grid">
-          <div class="stat-cell">
-            <span class="label">L (sáng)</span>
-            <span class="value" id="statL">—</span>
-          </div>
-          <div class="stat-cell">
-            <span class="label">a (lục–đỏ)</span>
-            <span class="value" id="statA">—</span>
-          </div>
-          <div class="stat-cell">
-            <span class="label">b (lam–vàng)</span>
-            <span class="value" id="statB">—</span>
-          </div>
-        </div>
+        <div class="stat-grid" id="statGrid"></div>
       </div>
     </section>
 
@@ -493,38 +498,21 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="js/color-space.js"></script>
+<script src="js/analysis-zones.js"></script>
+<script src="js/analysis-histogram.js"></script>
+<script src="js/style-match.js"></script>
 <script>
 (function(){
 
   const MAX_DIM = 1600; // cap for performance
 
-  // ---------- color space helpers ----------
-  function srgbToLinear(c){ c/=255; return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); }
-  function linearToSrgb(c){ return c<=0.0031308 ? c*12.92*255 : (1.055*Math.pow(c,1/2.4)-0.055)*255; }
-  function clamp255(v){ return v<0?0:(v>255?255:v); }
-
-  function rgbToLab(r,g,b){
-    const rl=srgbToLinear(r), gl=srgbToLinear(g), bl=srgbToLinear(b);
-    let X = rl*0.4124564+gl*0.3575761+bl*0.1804375;
-    let Y = rl*0.2126729+gl*0.7151522+bl*0.0721750;
-    let Z = rl*0.0193339+gl*0.1191920+bl*0.9503041;
-    X/=0.95047; Z/=1.08883;
-    const fx = X>0.008856 ? Math.cbrt(X) : (7.787*X+16/116);
-    const fy = Y>0.008856 ? Math.cbrt(Y) : (7.787*Y+16/116);
-    const fz = Z>0.008856 ? Math.cbrt(Z) : (7.787*Z+16/116);
-    return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
-  }
-  function labToRgb(L,a,b){
-    const fy=(L+16)/116, fx=a/500+fy, fz=fy-b/200;
-    const fx3=fx*fx*fx, fy3=fy*fy*fy, fz3=fz*fz*fz;
-    const X=0.95047*(fx3>0.008856?fx3:(fx-16/116)/7.787);
-    const Y=1.0*(fy3>0.008856?fy3:(fy-16/116)/7.787);
-    const Z=1.08883*(fz3>0.008856?fz3:(fz-16/116)/7.787);
-    const rl = X*3.2404542+Y*-1.5371385+Z*-0.4985314;
-    const gl = X*-0.9692660+Y*1.8760108+Z*0.0415560;
-    const bl = X*0.0556434+Y*-0.2040259+Z*1.0572252;
-    return [clamp255(linearToSrgb(rl)), clamp255(linearToSrgb(gl)), clamp255(linearToSrgb(bl))];
-  }
+  // Color-space conversions and the reference/target profile matching now
+  // live in js/color-space.js, js/analysis-zones.js, js/analysis-histogram.js
+  // and js/style-match.js (loaded above) so they're each independently
+  // maintainable/testable; pull the primitives used directly in this file
+  // into local names so the rest of the app doesn't need to change.
+  const {srgbToLinear, linearToSrgb, clamp255, rgbToLab, labToRgb, imageDataToLab} = TongMau.ColorSpace;
 
   function drawScaled(img, maxDim){
     let w = img.naturalWidth, h = img.naturalHeight;
@@ -535,34 +523,6 @@
     const ctx = c.getContext('2d');
     ctx.drawImage(img, 0, 0, w, h);
     return {canvas:c, ctx, imageData: ctx.getImageData(0,0,w,h)};
-  }
-
-  function imageDataToLab(imageData){
-    const px = imageData.data;
-    const n = imageData.width*imageData.height;
-    const lab = new Float32Array(n*3);
-    for(let i=0, p=0; i<n; i++, p+=4){
-      const [L,a,b] = rgbToLab(px[p], px[p+1], px[p+2]);
-      lab[i*3]=L; lab[i*3+1]=a; lab[i*3+2]=b;
-    }
-    return lab;
-  }
-
-  function labStats(lab){
-    const n = lab.length/3;
-    let sL=0,sA=0,sB=0;
-    for(let i=0;i<n;i++){ sL+=lab[i*3]; sA+=lab[i*3+1]; sB+=lab[i*3+2]; }
-    const mL=sL/n, mA=sA/n, mB=sB/n;
-    let vL=0,vA=0,vB=0;
-    for(let i=0;i<n;i++){
-      const dl=lab[i*3]-mL, da=lab[i*3+1]-mA, db=lab[i*3+2]-mB;
-      vL+=dl*dl; vA+=da*da; vB+=db*db;
-    }
-    return {
-      L:{mean:mL, std:Math.sqrt(vL/n)||1e-6},
-      a:{mean:mA, std:Math.sqrt(vA/n)||1e-6},
-      b:{mean:mB, std:Math.sqrt(vB/n)||1e-6}
-    };
   }
 
   function dominantSwatches(imageData, count){
@@ -582,10 +542,11 @@
 
   // ---------- state ----------
   let referenceImages = []; // {img, file}
-  let targetImages = []; // {img, file, name, id, prepared:{origData, canvas, ctx, labOriginal, labTransferred, ownStats}, aiBlobUrl}
-  let refStats = null;
+  let targetImages = []; // {img, file, name, id, prepared:{origData, canvas, ctx, labOriginal, labTransferred, ownProfile}, aiBlobUrl}
+  let refProfile = null; // TongMau.StyleMatch profile computed from the reference image(s)
   let refImageDatas = []; // for palette
   let mode = 'mvp'; // 'mvp' | 'ai'
+  let analysisOptions = {zone:false, lch:false, histogram:false}; // fixed at the moment "Phân tích phong cách" is clicked
 
   // ---------- mode switch ----------
   const modeMvpBtn = document.getElementById('modeMvpBtn');
@@ -613,7 +574,7 @@
 
   function canApply(){
     if(targetImages.length===0 || referenceImages.length===0) return false;
-    return mode==='ai' ? true : !!refStats;
+    return mode==='ai' ? true : !!refProfile;
   }
 
   function getBackendUrl(){
@@ -681,7 +642,7 @@
     renderRefThumbs();
     analyzeBtn.disabled = referenceImages.length===0;
     document.getElementById('analysisBlock').classList.add('hidden');
-    refStats = null;
+    refProfile = null;
     applyBtn.disabled = !canApply();
   });
 
@@ -696,17 +657,47 @@
         renderRefThumbs();
         analyzeBtn.disabled = referenceImages.length===0;
         document.getElementById('analysisBlock').classList.add('hidden');
-        refStats = null;
+        refProfile = null;
         applyBtn.disabled = !canApply();
       };
       refThumbs.appendChild(t);
     });
   }
 
+  const optZone = document.getElementById('optZone');
+  const optLch = document.getElementById('optLch');
+  const optHistogram = document.getElementById('optHistogram');
+
+  function renderAnalysisStats(desc){
+    const grid = document.getElementById('statGrid');
+    grid.classList.toggle('zoned', desc.zoned);
+    if(!desc.zoned){
+      grid.innerHTML = `
+        <div class="stat-cell"><span class="label">L (sáng)</span><span class="value">${desc.L}</span></div>
+        <div class="stat-cell"><span class="label">${desc.c1Label}</span><span class="value">${desc.rows[0].c1}</span></div>
+        <div class="stat-cell"><span class="label">${desc.c2Label}</span><span class="value">${desc.rows[0].c2}</span></div>
+      `;
+      return;
+    }
+    let html = `<div class="stat-cell"><span class="label">L (sáng, toàn cục)</span><span class="value">${desc.L}</span></div>`;
+    desc.rows.forEach(r=>{
+      html += `
+        <div class="stat-cell"><span class="label">${r.zone} · ${desc.c1Label}</span><span class="value">${r.c1}</span></div>
+        <div class="stat-cell"><span class="label">${r.zone} · ${desc.c2Label}</span><span class="value">${r.c2}</span></div>
+      `;
+    });
+    grid.innerHTML = html;
+  }
+
   analyzeBtn.addEventListener('click', ()=>{
+    analysisOptions = {
+      zone: optZone.checked,
+      lch: optLch.checked,
+      histogram: optHistogram.checked,
+    };
+
     refImageDatas = referenceImages.map(r=>drawScaled(r.img, MAX_DIM).imageData);
     // pool all lab pixels from all reference images
-    let pooled = [];
     let total = 0;
     refImageDatas.forEach(id=>{ total += id.width*id.height; });
     const pooledLab = new Float32Array(total*3);
@@ -716,10 +707,10 @@
       pooledLab.set(lab, offset*3);
       offset += lab.length/3;
     });
-    refStats = labStats(pooledLab);
+    refProfile = TongMau.StyleMatch.computeProfile(pooledLab, analysisOptions);
 
     // swatches from the first reference image (or could merge)
-    const swatchKeys = dominantSwatches(refImageDatas[0], 6);
+    const swatchKeys = dominantSwatches(refImageDatas[0], 10);
     const swatchesEl = document.getElementById('swatches');
     swatchesEl.innerHTML='';
     swatchKeys.forEach(k=>{
@@ -730,9 +721,7 @@
       swatchesEl.appendChild(sw);
     });
 
-    document.getElementById('statL').textContent = `μ ${refStats.L.mean.toFixed(1)} · σ ${refStats.L.std.toFixed(1)}`;
-    document.getElementById('statA').textContent = `μ ${refStats.a.mean.toFixed(1)} · σ ${refStats.a.std.toFixed(1)}`;
-    document.getElementById('statB').textContent = `μ ${refStats.b.mean.toFixed(1)} · σ ${refStats.b.std.toFixed(1)}`;
+    renderAnalysisStats(TongMau.StyleMatch.describeProfile(refProfile));
     document.getElementById('analysisBlock').classList.remove('hidden');
 
     applyBtn.disabled = !canApply();
@@ -996,16 +985,9 @@
   function prepareTarget(t){
     const {canvas, ctx, imageData} = drawScaled(t.img, MAX_DIM);
     const labOriginal = imageDataToLab(imageData);
-    const ownStats = labStats(labOriginal);
-    const n = labOriginal.length/3;
-    const labTransferred = new Float32Array(labOriginal.length);
-    for(let i=0;i<n;i++){
-      const L = labOriginal[i*3], a = labOriginal[i*3+1], b = labOriginal[i*3+2];
-      labTransferred[i*3]   = (L - ownStats.L.mean) * (refStats.L.std/ownStats.L.std) + refStats.L.mean;
-      labTransferred[i*3+1] = (a - ownStats.a.mean) * (refStats.a.std/ownStats.a.std) + refStats.a.mean;
-      labTransferred[i*3+2] = (b - ownStats.b.mean) * (refStats.b.std/ownStats.b.std) + refStats.b.mean;
-    }
-    t.prepared = {canvas, ctx, imageData, labOriginal, labTransferred, ownStats};
+    const ownProfile = TongMau.StyleMatch.computeProfile(labOriginal, analysisOptions);
+    const labTransferred = TongMau.StyleMatch.apply(ownProfile, refProfile);
+    t.prepared = {canvas, ctx, imageData, labOriginal, labTransferred, ownProfile};
   }
 
   function renderTargetResult(t, intensity){
