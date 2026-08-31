@@ -1,0 +1,7 @@
+# Cài torch/torchvision RIÊNG trước, theo đúng bản CUDA của máy bạn — xem README.md.
+# Sau đó mới chạy: pip install -r requirements.txt
+fastapi==0.115.*
+uvicorn[standard]==0.32.*
+python-multipart==0.0.*
+Pillow>=10.0
+numpy>=1.24

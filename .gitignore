@@ -1,0 +1,11 @@
+# Python virtual environment
+backend/venv/
+__pycache__/
+*.pyc
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# Claude Code session files
+.claude/

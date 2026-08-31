@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tông Màu — Color Style Transfer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #121217;
+    --panel: #1b1b22;
+    --panel-2: #212129;
+    --border: #2d2d38;
+    --text: #ece8e2;
+    --text-dim: #928f9c;
+    --text-faint: #605d6b;
+    --amber: #e8a33d;
+    --amber-dim: #7a5a29;
+    --danger: #d9695f;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+  }
+  .app{max-width:1320px;margin:0 auto;padding:40px 28px 80px;}
+
+  header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:24px;
+    border-bottom:1px solid var(--border);
+    padding-bottom:28px;
+    margin-bottom:36px;
+    flex-wrap:wrap;
+  }
+  header h1{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    font-size:2.1rem;
+    margin:0 0 8px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    color:var(--text-dim);
+    max-width:46ch;
+    margin:0;
+    font-size:0.95rem;
+  }
+  .badge{
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.72rem;
+    color:var(--amber);
+    border:1px solid var(--amber-dim);
+    padding:5px 10px;
+    border-radius:3px;
+    white-space:nowrap;
+  }
+
+  .mode-switch{
+    margin-bottom:28px;
+  }
+  .mode-tabs{
+    display:inline-flex;
+    border:1px solid var(--border);
+    border-radius:5px;
+    overflow:hidden;
+  }
+  .mode-tab{
+    background:var(--panel);
+    color:var(--text-dim);
+    border:none;
+    font-family:'Inter',sans-serif;
+    font-size:0.82rem;
+    padding:9px 16px;
+    cursor:pointer;
+    border-right:1px solid var(--border);
+  }
+  .mode-tab:last-child{border-right:none;}
+  .mode-tab:hover{color:var(--text);}
+  .mode-tab.active{background:var(--amber);color:#1a1409;font-weight:600;}
+  .ai-settings{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:14px;
+    padding:14px 16px;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:5px;
+  }
+  .ai-settings.hidden{display:none;}
+  .ai-settings label{font-size:0.8rem;color:var(--text-dim);white-space:nowrap;}
+  .ai-settings input[type=text]{
+    flex:1;
+    min-width:180px;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.78rem;
+    padding:7px 10px;
+    border-radius:4px;
+  }
+  .ai-settings select{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.76rem;
+    padding:6px 8px;
+    border-radius:4px;
+  }
+  .server-status{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:0.78rem;
+    color:var(--text-dim);
+    white-space:nowrap;
+  }
+  .server-status .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--text-faint);
+    flex-shrink:0;
+  }
+  .server-status.ok .dot{background:#6fbf73;}
+  .server-status.err .dot{background:var(--danger);}
+  .server-status.checking .dot{background:var(--amber);}
+
+  .workspace{
+    display:grid;
+    grid-template-columns:0.85fr 1.15fr;
+    gap:24px;
+  }
+  @media (max-width:900px){
+    .workspace{grid-template-columns:1fr;}
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:24px;
+  }
+  .panel-title{
+    font-family:'Fraunces',serif;
+    font-size:1.15rem;
+    font-weight:500;
+    margin:0 0 4px;
+  }
+  .panel-sub{
+    color:var(--text-dim);
+    font-size:0.85rem;
+    margin:0 0 20px;
+  }
+
+  .dropzone{
+    border:1px dashed var(--border);
+    border-radius:5px;
+    padding:22px;
+    text-align:left;
+    cursor:pointer;
+    color:var(--text-dim);
+    font-size:0.88rem;
+    transition:border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--amber-dim);
+    background:rgba(232,163,61,0.04);
+  }
+  .dropzone strong{color:var(--text);font-weight:500;}
+  input[type=file]{display:none;}
+
+  .thumb-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:16px;
+  }
+  .thumb{
+    position:relative;
+    width:74px;
+    height:74px;
+    border-radius:4px;
+    overflow:hidden;
+    border:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb .remove{
+    position:absolute;top:2px;right:2px;
+    width:18px;height:18px;
+    background:rgba(18,18,23,0.85);
+    border:none;color:var(--text-dim);
+    border-radius:3px;
+    font-size:11px;
+    cursor:pointer;
+    line-height:18px;
+    padding:0;
+  }
+  .thumb .remove:hover{color:var(--danger);}
+
+  button.primary{
+    background:var(--amber);
+    color:#1a1409;
+    border:none;
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:0.88rem;
+    padding:11px 18px;
+    border-radius:4px;
+    cursor:pointer;
+    margin-top:18px;
+  }
+  button.primary:disabled{
+    background:var(--panel-2);
+    color:var(--text-faint);
+    cursor:not-allowed;
+  }
+  button.secondary{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    font-family:'Inter',sans-serif;
+    font-size:0.82rem;
+    padding:8px 14px;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  button.secondary:hover{color:var(--text);border-color:var(--text-faint);}
+
+  .analysis{
+    margin-top:22px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+  }
+  .analysis.hidden{display:none;}
+  .swatches{display:flex;gap:6px;margin-bottom:16px;}
+  .swatch{
+    height:38px;
+    flex:1;
+    border-radius:3px;
+    border:1px solid var(--border);
+  }
+  .stat-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:10px;
+  }
+  .stat-cell{
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.72rem;
+    color:var(--text-dim);
+  }
+  .stat-cell .label{color:var(--text-faint);display:block;margin-bottom:3px;}
+  .stat-cell .value{color:var(--text);font-size:0.8rem;}
+
+  .intensity-block{
+    margin-top:22px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+  }
+  .intensity-row{display:flex;align-items:center;gap:14px;}
+  .intensity-row input[type=range]{flex:1;accent-color:var(--amber);}
+  .intensity-value{
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.85rem;
+    width:44px;
+    text-align:right;
+    color:var(--amber);
+  }
+
+  .target-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(240px,1fr));
+    gap:16px;
+    margin-top:20px;
+  }
+  .target-card{
+    border:1px solid var(--border);
+    border-radius:5px;
+    overflow:hidden;
+    background:var(--panel-2);
+  }
+  .target-card .compare{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .target-card canvas, .target-card img{
+    width:100%;
+    height:130px;
+    object-fit:cover;
+    display:block;
+  }
+  .target-card .compare div{position:relative;}
+  .target-card .tag{
+    position:absolute;
+    bottom:5px;left:6px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.62rem;
+    color:#fff;
+    background:rgba(0,0,0,0.45);
+    padding:2px 6px;
+    border-radius:2px;
+  }
+  .target-card .card-foot{
+    padding:10px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+  }
+  .target-card.processing .result-img{opacity:0.35;}
+  .target-card .processing-note{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.68rem;color:var(--amber);
+    background:rgba(0,0,0,0.55);
+    padding:3px 8px;border-radius:3px;
+    display:none;white-space:nowrap;
+  }
+  .target-card.processing .processing-note{display:block;}
+  .target-card.error .processing-note{display:block;color:var(--danger);background:rgba(0,0,0,0.7);}
+  .target-card .card-foot .name{
+    font-size:0.76rem;
+    color:var(--text-dim);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    max-width:130px;
+  }
+
+  .empty-note{
+    color:var(--text-faint);
+    font-size:0.85rem;
+    margin-top:20px;
+    font-style:italic;
+  }
+  footer{
+    margin-top:40px;
+    color:var(--text-faint);
+    font-size:0.78rem;
+    border-top:1px solid var(--border);
+    padding-top:18px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div>
+      <h1>Tông Màu</h1>
+      <p>Phân tích ánh sáng, tông màu và tương phản từ ảnh tham chiếu, rồi áp dụng phong cách đó lên ảnh của bạn — xử lý hoàn toàn trên trình duyệt.</p>
+    </div>
+    <span class="badge">MVP · v0.1</span>
+  </header>
+
+  <div class="mode-switch">
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="modeMvpBtn" data-mode="mvp">Nhanh (LAB) · chạy trong trình duyệt</button>
+      <button class="mode-tab" id="modeAiBtn" data-mode="ai">AI nâng cao (WCT2) · cần server</button>
+    </div>
+    <div class="ai-settings hidden" id="aiSettings">
+      <label for="backendUrlInput">Địa chỉ backend</label>
+      <input type="text" id="backendUrlInput" value="http://localhost:8000" spellcheck="false">
+      <span class="server-status" id="serverStatus">
+        <span class="dot" id="serverDot"></span>
+        <span id="serverStatusText">chưa kiểm tra</span>
+      </span>
+      <button class="secondary" id="checkServerBtn">Kiểm tra kết nối</button>
+      <label for="imageSizeSelect">Kích thước xử lý</label>
+      <select id="imageSizeSelect">
+        <option value="512">512px · nhanh nhất</option>
+        <option value="1024" selected>1024px · khuyến nghị (an toàn cho card 4GB+, vd. GTX 1650)</option>
+        <option value="1536">1536px · chậm hơn, chi tiết hơn</option>
+        <option value="2048">2048px · chậm nhất, tối đa</option>
+      </select>
+    </div>
+  </div>
+
+  <main class="workspace">
+
+    <!-- REFERENCE PANEL -->
+    <section class="panel">
+      <h2 class="panel-title">Ảnh tham chiếu</h2>
+      <p class="panel-sub">Chọn 1 hoặc nhiều ảnh có phong cách bạn muốn áp dụng.</p>
+
+      <div class="dropzone" id="refDropzone">
+        <strong>Nhấn để chọn ảnh</strong> hoặc kéo-thả vào đây
+      </div>
+      <input type="file" id="refInput" accept="image/*" multiple>
+      <div class="thumb-row" id="refThumbs"></div>
+
+      <button class="primary" id="analyzeBtn" disabled>Phân tích phong cách</button>
+
+      <div class="analysis hidden" id="analysisBlock">
+        <div class="swatches" id="swatches"></div>
+        <div class="stat-grid">
+          <div class="stat-cell">
+            <span class="label">L (sáng)</span>
+            <span class="value" id="statL">—</span>
+          </div>
+          <div class="stat-cell">
+            <span class="label">a (lục–đỏ)</span>
+            <span class="value" id="statA">—</span>
+          </div>
+          <div class="stat-cell">
+            <span class="label">b (lam–vàng)</span>
+            <span class="value" id="statB">—</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TARGET PANEL -->
+    <section class="panel">
+      <h2 class="panel-title">Ảnh cần chỉnh</h2>
+      <p class="panel-sub">Ảnh sẽ được áp phong cách từ ảnh tham chiếu bên trái.</p>
+
+      <div class="dropzone" id="tgtDropzone">
+        <strong>Nhấn để chọn ảnh</strong> hoặc kéo-thả vào đây — hỗ trợ nhiều ảnh
+      </div>
+      <input type="file" id="tgtInput" accept="image/*" multiple>
+
+      <div class="intensity-block">
+        <div class="intensity-row">
+          <span style="font-size:0.82rem;color:var(--text-dim);white-space:nowrap;">Cường độ</span>
+          <input type="range" id="intensitySlider" min="0" max="100" value="85">
+          <span class="intensity-value" id="intensityValue">85%</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button class="primary" id="applyBtn" disabled>Áp dụng phong cách</button>
+          <button class="secondary" id="downloadAllBtn" disabled>Tải tất cả (.zip)</button>
+        </div>
+      </div>
+
+      <p style="color:var(--text-faint);font-size:0.78rem;margin:0;">Trên điện thoại: chạm giữ vào ảnh "Sau" để lưu trực tiếp vào thư viện ảnh.</p>
+      <div class="target-grid" id="targetGrid"></div>
+      <p class="empty-note" id="emptyNote">Chưa có ảnh nào được tải lên.</p>
+    </section>
+
+  </main>
+
+  <footer>
+    Xử lý theo phương pháp khớp thống kê màu trong không gian LAB (Reinhard color transfer). Ảnh được xử lý hoàn toàn trong trình duyệt của bạn, không tải lên server nào.
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function(){
+
+  const MAX_DIM = 1600; // cap for performance
+
+  // ---------- color space helpers ----------
+  function srgbToLinear(c){ c/=255; return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); }
+  function linearToSrgb(c){ return c<=0.0031308 ? c*12.92*255 : (1.055*Math.pow(c,1/2.4)-0.055)*255; }
+  function clamp255(v){ return v<0?0:(v>255?255:v); }
+
+  function rgbToLab(r,g,b){
+    const rl=srgbToLinear(r), gl=srgbToLinear(g), bl=srgbToLinear(b);
+    let X = rl*0.4124564+gl*0.3575761+bl*0.1804375;
+    let Y = rl*0.2126729+gl*0.7151522+bl*0.0721750;
+    let Z = rl*0.0193339+gl*0.1191920+bl*0.9503041;
+    X/=0.95047; Z/=1.08883;
+    const fx = X>0.008856 ? Math.cbrt(X) : (7.787*X+16/116);
+    const fy = Y>0.008856 ? Math.cbrt(Y) : (7.787*Y+16/116);
+    const fz = Z>0.008856 ? Math.cbrt(Z) : (7.787*Z+16/116);
+    return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+  }
+  function labToRgb(L,a,b){
+    const fy=(L+16)/116, fx=a/500+fy, fz=fy-b/200;
+    const fx3=fx*fx*fx, fy3=fy*fy*fy, fz3=fz*fz*fz;
+    const X=0.95047*(fx3>0.008856?fx3:(fx-16/116)/7.787);
+    const Y=1.0*(fy3>0.008856?fy3:(fy-16/116)/7.787);
+    const Z=1.08883*(fz3>0.008856?fz3:(fz-16/116)/7.787);
+    const rl = X*3.2404542+Y*-1.5371385+Z*-0.4985314;
+    const gl = X*-0.9692660+Y*1.8760108+Z*0.0415560;
+    const bl = X*0.0556434+Y*-0.2040259+Z*1.0572252;
+    return [clamp255(linearToSrgb(rl)), clamp255(linearToSrgb(gl)), clamp255(linearToSrgb(bl))];
+  }
+
+  function drawScaled(img, maxDim){
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, maxDim/Math.max(w,h));
+    w = Math.round(w*scale); h = Math.round(h*scale);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    return {canvas:c, ctx, imageData: ctx.getImageData(0,0,w,h)};
+  }
+
+  function imageDataToLab(imageData){
+    const px = imageData.data;
+    const n = imageData.width*imageData.height;
+    const lab = new Float32Array(n*3);
+    for(let i=0, p=0; i<n; i++, p+=4){
+      const [L,a,b] = rgbToLab(px[p], px[p+1], px[p+2]);
+      lab[i*3]=L; lab[i*3+1]=a; lab[i*3+2]=b;
+    }
+    return lab;
+  }
+
+  function labStats(lab){
+    const n = lab.length/3;
+    let sL=0,sA=0,sB=0;
+    for(let i=0;i<n;i++){ sL+=lab[i*3]; sA+=lab[i*3+1]; sB+=lab[i*3+2]; }
+    const mL=sL/n, mA=sA/n, mB=sB/n;
+    let vL=0,vA=0,vB=0;
+    for(let i=0;i<n;i++){
+      const dl=lab[i*3]-mL, da=lab[i*3+1]-mA, db=lab[i*3+2]-mB;
+      vL+=dl*dl; vA+=da*da; vB+=db*db;
+    }
+    return {
+      L:{mean:mL, std:Math.sqrt(vL/n)||1e-6},
+      a:{mean:mA, std:Math.sqrt(vA/n)||1e-6},
+      b:{mean:mB, std:Math.sqrt(vB/n)||1e-6}
+    };
+  }
+
+  function dominantSwatches(imageData, count){
+    const px = imageData.data;
+    const buckets = new Map();
+    const step = 4; // sample every 4th pixel for speed
+    for(let i=0;i<px.length;i+=4*step){
+      const r=px[i]>>4<<4, g=px[i+1]>>4<<4, b=px[i+2]>>4<<4;
+      const key = r+','+g+','+b;
+      buckets.set(key, (buckets.get(key)||0)+1);
+    }
+    return [...buckets.entries()]
+      .sort((a,b)=>b[1]-a[1])
+      .slice(0,count)
+      .map(([key])=>key);
+  }
+
+  // ---------- state ----------
+  let referenceImages = []; // {img, file}
+  let targetImages = []; // {img, file, name, id, prepared:{origData, canvas, ctx, labOriginal, labTransferred, ownStats}, aiBlobUrl}
+  let refStats = null;
+  let refImageDatas = []; // for palette
+  let mode = 'mvp'; // 'mvp' | 'ai'
+
+  // ---------- mode switch ----------
+  const modeMvpBtn = document.getElementById('modeMvpBtn');
+  const modeAiBtn = document.getElementById('modeAiBtn');
+  const aiSettings = document.getElementById('aiSettings');
+  const backendUrlInput = document.getElementById('backendUrlInput');
+  const checkServerBtn = document.getElementById('checkServerBtn');
+  const serverStatus = document.getElementById('serverStatus');
+  const serverStatusText = document.getElementById('serverStatusText');
+  const imageSizeSelect = document.getElementById('imageSizeSelect');
+
+  function setMode(m){
+    mode = m;
+    modeMvpBtn.classList.toggle('active', m==='mvp');
+    modeAiBtn.classList.toggle('active', m==='ai');
+    aiSettings.classList.toggle('hidden', m!=='ai');
+    applyBtn.textContent = m==='ai' ? 'Áp dụng phong cách (AI)' : 'Áp dụng phong cách';
+    applyBtn.disabled = !canApply();
+  }
+  modeMvpBtn.addEventListener('click', ()=>setMode('mvp'));
+  modeAiBtn.addEventListener('click', ()=>{
+    setMode('ai');
+    if(serverStatus.className.indexOf('ok')===-1) checkServer();
+  });
+
+  function canApply(){
+    if(targetImages.length===0 || referenceImages.length===0) return false;
+    return mode==='ai' ? true : !!refStats;
+  }
+
+  function getBackendUrl(){
+    return backendUrlInput.value.trim().replace(/\/+$/,'');
+  }
+
+  async function checkServer(){
+    const url = getBackendUrl();
+    if(!url){ return; }
+    serverStatus.className = 'server-status checking';
+    serverStatusText.textContent = 'đang kiểm tra…';
+    try{
+      const ctrl = new AbortController();
+      const timer = setTimeout(()=>ctrl.abort(), 5000);
+      const res = await fetch(url+'/health', {signal: ctrl.signal});
+      clearTimeout(timer);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      serverStatus.className = 'server-status ok';
+      serverStatusText.textContent = data.cuda_available
+        ? `sẵn sàng · GPU: ${data.gpu_name}`
+        : 'sẵn sàng · CPU (chậm, không có GPU)';
+    }catch(err){
+      serverStatus.className = 'server-status err';
+      serverStatusText.textContent = 'không kết nối được — server chưa chạy?';
+    }
+  }
+  checkServerBtn.addEventListener('click', checkServer);
+
+  // ---------- upload handling ----------
+  function setupDropzone(dropEl, inputEl, onFiles){
+    dropEl.addEventListener('click', ()=>inputEl.click());
+    inputEl.addEventListener('change', e=>onFiles(e.target.files));
+    dropEl.addEventListener('dragover', e=>{ e.preventDefault(); dropEl.classList.add('drag'); });
+    dropEl.addEventListener('dragleave', ()=>dropEl.classList.remove('drag'));
+    dropEl.addEventListener('drop', e=>{
+      e.preventDefault(); dropEl.classList.remove('drag');
+      onFiles(e.dataTransfer.files);
+    });
+  }
+
+  function loadImageFile(file){
+    return new Promise((resolve)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const img = new Image();
+        img.onload = ()=>resolve(img);
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const refDropzone = document.getElementById('refDropzone');
+  const refInput = document.getElementById('refInput');
+  const refThumbs = document.getElementById('refThumbs');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+
+  setupDropzone(refDropzone, refInput, async(files)=>{
+    for(const f of files){
+      if(!f.type.startsWith('image/')) continue;
+      const img = await loadImageFile(f);
+      referenceImages.push({img, file:f});
+    }
+    renderRefThumbs();
+    analyzeBtn.disabled = referenceImages.length===0;
+    document.getElementById('analysisBlock').classList.add('hidden');
+    refStats = null;
+    applyBtn.disabled = !canApply();
+  });
+
+  function renderRefThumbs(){
+    refThumbs.innerHTML='';
+    referenceImages.forEach((r,idx)=>{
+      const t = document.createElement('div');
+      t.className='thumb';
+      t.innerHTML = `<img src="${r.img.src}"><button class="remove">×</button>`;
+      t.querySelector('.remove').onclick = ()=>{
+        referenceImages.splice(idx,1);
+        renderRefThumbs();
+        analyzeBtn.disabled = referenceImages.length===0;
+        document.getElementById('analysisBlock').classList.add('hidden');
+        refStats = null;
+        applyBtn.disabled = !canApply();
+      };
+      refThumbs.appendChild(t);
+    });
+  }
+
+  analyzeBtn.addEventListener('click', ()=>{
+    refImageDatas = referenceImages.map(r=>drawScaled(r.img, MAX_DIM).imageData);
+    // pool all lab pixels from all reference images
+    let pooled = [];
+    let total = 0;
+    refImageDatas.forEach(id=>{ total += id.width*id.height; });
+    const pooledLab = new Float32Array(total*3);
+    let offset = 0;
+    refImageDatas.forEach(id=>{
+      const lab = imageDataToLab(id);
+      pooledLab.set(lab, offset*3);
+      offset += lab.length/3;
+    });
+    refStats = labStats(pooledLab);
+
+    // swatches from the first reference image (or could merge)
+    const swatchKeys = dominantSwatches(refImageDatas[0], 6);
+    const swatchesEl = document.getElementById('swatches');
+    swatchesEl.innerHTML='';
+    swatchKeys.forEach(k=>{
+      const [r,g,b] = k.split(',').map(Number);
+      const sw = document.createElement('div');
+      sw.className='swatch';
+      sw.style.background = `rgb(${r},${g},${b})`;
+      swatchesEl.appendChild(sw);
+    });
+
+    document.getElementById('statL').textContent = `μ ${refStats.L.mean.toFixed(1)} · σ ${refStats.L.std.toFixed(1)}`;
+    document.getElementById('statA').textContent = `μ ${refStats.a.mean.toFixed(1)} · σ ${refStats.a.std.toFixed(1)}`;
+    document.getElementById('statB').textContent = `μ ${refStats.b.mean.toFixed(1)} · σ ${refStats.b.std.toFixed(1)}`;
+    document.getElementById('analysisBlock').classList.remove('hidden');
+
+    applyBtn.disabled = !canApply();
+  });
+
+  // ---------- target images ----------
+  const tgtDropzone = document.getElementById('tgtDropzone');
+  const tgtInput = document.getElementById('tgtInput');
+  const targetGrid = document.getElementById('targetGrid');
+  const emptyNote = document.getElementById('emptyNote');
+  const applyBtn = document.getElementById('applyBtn');
+  const downloadAllBtn = document.getElementById('downloadAllBtn');
+  const intensitySlider = document.getElementById('intensitySlider');
+  const intensityValue = document.getElementById('intensityValue');
+
+  let idCounter = 0;
+
+  setupDropzone(tgtDropzone, tgtInput, async(files)=>{
+    for(const f of files){
+      if(!f.type.startsWith('image/')) continue;
+      const img = await loadImageFile(f);
+      targetImages.push({img, file:f, name:f.name, id:'t'+(idCounter++), prepared:null, aiBlobUrl:null});
+    }
+    renderTargetGrid();
+    applyBtn.disabled = !canApply();
+    downloadAllBtn.disabled = true;
+  });
+
+  function renderTargetGrid(){
+    targetGrid.innerHTML='';
+    emptyNote.style.display = targetImages.length? 'none':'block';
+    targetImages.forEach(t=>{
+      const card = document.createElement('div');
+      card.className='target-card';
+      card.dataset.id = t.id;
+      card.innerHTML = `
+        <div class="compare">
+          <div><img src="${t.img.src}"><span class="tag">Gốc</span></div>
+          <div><img class="result-img" src="${t.img.src}"><span class="tag">Sau</span><span class="processing-note">Đang xử lý…</span></div>
+        </div>
+        <div class="card-foot">
+          <span class="name" title="${t.name}">${t.name}</span>
+          <div style="display:flex;gap:6px;">
+            <button class="secondary dl-btn" disabled>Tải</button>
+            <button class="secondary rm-btn">×</button>
+          </div>
+        </div>
+      `;
+      card.querySelector('.rm-btn').onclick = ()=>{
+        targetImages = targetImages.filter(x=>x.id!==t.id);
+        renderTargetGrid();
+        applyBtn.disabled = !canApply();
+      };
+      targetGrid.appendChild(card);
+    });
+  }
+
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  function downloadCanvas(canvas, filename){
+    if (isIOS){
+      // iOS Safari ignores the anchor "download" attribute and blocks
+      // programmatic downloads inside embedded previews. The reliable
+      // path there is long-pressing the visible result image directly.
+      alert('Trên iPhone/iPad: chạm giữ vào ảnh "Sau" phía trên rồi chọn "Lưu vào Ảnh".');
+      return;
+    }
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function prepareTarget(t){
+    const {canvas, ctx, imageData} = drawScaled(t.img, MAX_DIM);
+    const labOriginal = imageDataToLab(imageData);
+    const ownStats = labStats(labOriginal);
+    const n = labOriginal.length/3;
+    const labTransferred = new Float32Array(labOriginal.length);
+    for(let i=0;i<n;i++){
+      const L = labOriginal[i*3], a = labOriginal[i*3+1], b = labOriginal[i*3+2];
+      labTransferred[i*3]   = (L - ownStats.L.mean) * (refStats.L.std/ownStats.L.std) + refStats.L.mean;
+      labTransferred[i*3+1] = (a - ownStats.a.mean) * (refStats.a.std/ownStats.a.std) + refStats.a.mean;
+      labTransferred[i*3+2] = (b - ownStats.b.mean) * (refStats.b.std/ownStats.b.std) + refStats.b.mean;
+    }
+    t.prepared = {canvas, ctx, imageData, labOriginal, labTransferred, ownStats};
+  }
+
+  function renderTargetResult(t, intensity){
+    if(!t.prepared) return;
+    const {imageData, labOriginal, labTransferred} = t.prepared;
+    const out = t.prepared.ctx.createImageData(imageData.width, imageData.height);
+    const n = labOriginal.length/3;
+    const alpha = intensity/100;
+    for(let i=0;i<n;i++){
+      const L = labOriginal[i*3]*(1-alpha) + labTransferred[i*3]*alpha;
+      const a = labOriginal[i*3+1]*(1-alpha) + labTransferred[i*3+1]*alpha;
+      const b = labOriginal[i*3+2]*(1-alpha) + labTransferred[i*3+2]*alpha;
+      const [r,g,bl] = labToRgb(L,a,b);
+      out.data[i*4]=r; out.data[i*4+1]=g; out.data[i*4+2]=bl; out.data[i*4+3]=255;
+    }
+    t.prepared.ctx.putImageData(out, 0, 0);
+    const dataUrl = t.prepared.canvas.toDataURL('image/png');
+
+    const card = targetGrid.querySelector(`[data-id="${t.id}"]`);
+    if(card){
+      const resultImg = card.querySelector('.result-img');
+      resultImg.src = dataUrl;
+      const dlBtn = card.querySelector('.dl-btn');
+      dlBtn.disabled = false;
+      dlBtn.onclick = ()=>{
+        downloadCanvas(t.prepared.canvas, 'styled-'+t.name.replace(/\.[^.]+$/,'')+'.png');
+      };
+    }
+  }
+
+  function setCardState(t, state){ // 'processing' | 'error' | null
+    const card = targetGrid.querySelector(`[data-id="${t.id}"]`);
+    if(!card) return;
+    card.classList.remove('processing','error');
+    if(state) card.classList.add(state);
+    if(state==='error'){
+      const note = card.querySelector('.processing-note');
+      if(note) note.textContent = 'Lỗi — xem chi tiết bên dưới';
+    }
+  }
+
+  async function applyAI(t){
+    const url = getBackendUrl();
+    if(!url){ alert('Nhập địa chỉ backend trước.'); return; }
+    setCardState(t, 'processing');
+    try{
+      const form = new FormData();
+      form.append('target', t.file);
+      referenceImages.forEach(r=>form.append('references', r.file));
+      form.append('alpha', String(Number(intensitySlider.value)/100));
+      form.append('image_size', imageSizeSelect.value);
+      const res = await fetch(url+'/style-transfer', {method:'POST', body: form});
+      if(!res.ok){
+        let detail = 'HTTP '+res.status;
+        try{ const j = await res.json(); if(j.detail) detail = j.detail; }catch(_){}
+        if(/out of memory/i.test(detail)) detail += ' — thử chọn "Kích thước xử lý" nhỏ hơn.';
+        throw new Error(detail);
+      }
+      const blob = await res.blob();
+      if(t.aiBlobUrl) URL.revokeObjectURL(t.aiBlobUrl);
+      t.aiBlobUrl = URL.createObjectURL(blob);
+      t.aiBlob = blob;
+      setCardState(t, null);
+      const card = targetGrid.querySelector(`[data-id="${t.id}"]`);
+      if(card){
+        card.querySelector('.result-img').src = t.aiBlobUrl;
+        const dlBtn = card.querySelector('.dl-btn');
+        dlBtn.disabled = false;
+        dlBtn.onclick = ()=>{
+          if (isIOS){
+            alert('Trên iPhone/iPad: chạm giữ vào ảnh "Sau" phía trên rồi chọn "Lưu vào Ảnh".');
+            return;
+          }
+          const a = document.createElement('a');
+          a.href = t.aiBlobUrl;
+          a.download = 'styled-'+t.name.replace(/\.[^.]+$/,'')+'.png';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        };
+      }
+    }catch(err){
+      console.error(err);
+      setCardState(t, 'error');
+      const card = targetGrid.querySelector(`[data-id="${t.id}"]`);
+      if(card) card.querySelector('.processing-note').textContent = 'Lỗi: '+err.message;
+    }
+  }
+
+  applyBtn.addEventListener('click', async ()=>{
+    if(!canApply()) return;
+    if(mode==='ai'){
+      applyBtn.disabled = true;
+      await Promise.all(targetImages.map(t=>applyAI(t)));
+      applyBtn.disabled = !canApply();
+      downloadAllBtn.disabled = !targetImages.some(t=>t.aiBlob);
+    } else {
+      targetImages.forEach(t=>{
+        prepareTarget(t);
+        renderTargetResult(t, Number(intensitySlider.value));
+      });
+      downloadAllBtn.disabled = targetImages.length===0;
+    }
+  });
+
+  let sliderTimer=null;
+  intensitySlider.addEventListener('input', ()=>{
+    intensityValue.textContent = intensitySlider.value+'%';
+    clearTimeout(sliderTimer);
+    sliderTimer = setTimeout(()=>{
+      targetImages.forEach(t=>{
+        if(t.prepared) renderTargetResult(t, Number(intensitySlider.value));
+      });
+    }, 60);
+  });
+
+  downloadAllBtn.addEventListener('click', async ()=>{
+    if (isIOS){
+      alert('Safari trên iPhone/iPad không hỗ trợ tải file .zip trực tiếp. Vui lòng dùng nút "Tải" trên từng ảnh để lưu lần lượt.');
+      return;
+    }
+    const zip = new JSZip();
+    const ready = mode==='ai' ? targetImages.filter(t=>t.aiBlob) : targetImages.filter(t=>t.prepared);
+    for(const t of ready){
+      const blob = mode==='ai' ? t.aiBlob : await new Promise(res=>t.prepared.canvas.toBlob(res));
+      zip.file('styled-'+t.name.replace(/\.[^.]+$/,'')+'.png', blob);
+    }
+    const content = await zip.generateAsync({type:'blob'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = 'styled-images.zip';
+    a.click();
+  });
+
+})();
+</script>
+</body>
+</html>
