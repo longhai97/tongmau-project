@@ -5,6 +5,11 @@ Chạy hoàn toàn trên máy bạn — không có chi phí server, không gửi
 
 ## 1. Cài đặt
 
+**Yêu cầu Python**: bản **3.12** (khuyên dùng — đây cũng là bản mà `start_ai.bat` tự cài trên Windows) hoặc 3.11; cả hai đều tương thích với torch/fastapi trong project này.
+
+- Windows: tải trình cài đặt tại https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe — nhớ tick **"Add python.exe to PATH"** ở màn hình đầu tiên khi cài. (Chỉ dùng `start_ai.bat` thì không cần tự tải — file này tự kiểm tra và tự cài Python qua winget nếu máy chưa có.)
+- macOS/Linux: tải tại https://www.python.org/downloads/ (chọn đúng hệ điều hành) hoặc cài qua trình quản lý gói của hệ thống (`brew install python@3.12`, v.v.).
+
 ```bash
 cd backend
 python3 -m venv venv
