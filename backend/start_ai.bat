@@ -4,14 +4,33 @@ REM Chi can double-click file nay. Lan sau chay lai se nhanh vi khong cai lai.
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-where python >nul 2>nul
+REM "where python" khong du tin cay: Windows co san mot shortcut gia
+REM (App Execution Alias) tro toi Microsoft Store, "where" van tim thay no
+REM du chua cai Python that. Kiem tra bang cach doc that "python --version".
+set PYCHECK=%TEMP%\tongmau_pycheck.txt
+python --version >"%PYCHECK%" 2>&1
+findstr /b /c:"Python " "%PYCHECK%" >nul
 if errorlevel 1 (
-    echo [Loi] Chua cai Python.
-    echo Vui long cai tai https://www.python.org/downloads/
-    echo Nho tick "Add python.exe to PATH" khi cai, roi chay lai file nay.
-    pause
-    exit /b 1
+    echo Python chua duoc cai that su tren may nay ^(chi thay shortcut cua Microsoft Store^).
+    where winget >nul 2>nul
+    if errorlevel 1 (
+        echo [Loi] Vui long cai Python tai https://www.python.org/downloads/
+        echo Nho tick "Add python.exe to PATH" khi cai, roi chay lai file nay.
+        del "%PYCHECK%" >nul 2>nul
+        pause
+        exit /b 1
+    ) else (
+        echo Dang tu dong cai Python 3.11 qua winget, vui long doi...
+        winget install --id Python.Python.3.11 --scope user --silent --accept-package-agreements --accept-source-agreements
+        del "%PYCHECK%" >nul 2>nul
+        echo.
+        echo Da cai xong Python. Dong cua so nay va chay lai file start_ai.bat mot lan nua
+        echo ^(can mo cua so moi de nhan duoc PATH vua cap nhat^).
+        pause
+        exit /b 0
+    )
 )
+del "%PYCHECK%" >nul 2>nul
 
 if not exist venv (
     echo Dang tao moi truong Python rieng cho project...
