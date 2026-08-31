@@ -278,6 +278,41 @@
     color:var(--amber);
   }
 
+  .grading-block{
+    margin-top:22px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+  }
+  .grading-block.disabled{opacity:0.4;pointer-events:none;}
+  .grading-group{border:none;margin:0 0 6px;}
+  .grading-group summary{
+    cursor:pointer;
+    font-family:'Fraunces',serif;
+    font-size:0.95rem;
+    font-weight:500;
+    padding:6px 0;
+    list-style:none;
+  }
+  .grading-group summary::-webkit-details-marker{display:none;}
+  .grading-group summary::before{content:'▸ ';color:var(--text-dim);font-size:0.8em;}
+  .grading-group[open] summary::before{content:'▾ ';}
+  .grading-row{
+    display:grid;
+    grid-template-columns:84px 1fr 46px;
+    align-items:center;
+    gap:10px;
+    margin:8px 0;
+  }
+  .grading-row .grading-label{font-size:0.8rem;color:var(--text-dim);}
+  .grading-row input[type=range]{accent-color:var(--amber);width:100%;}
+  .grading-row .grading-value{
+    font-family:'JetBrains Mono',monospace;
+    font-size:0.78rem;
+    text-align:right;
+    color:var(--text);
+  }
+  #resetGradingBtn{margin-top:10px;}
+
   .target-grid{
     display:grid;
     grid-template-columns:repeat(auto-fill, minmax(240px,1fr));
@@ -442,6 +477,8 @@
           <button class="secondary" id="downloadAllBtn" disabled>Tải tất cả (.zip)</button>
         </div>
       </div>
+
+      <div class="grading-block disabled" id="gradingBlock"></div>
 
       <p style="color:var(--text-faint);font-size:0.78rem;margin:0;">Trên điện thoại: chạm giữ vào ảnh "Sau" để lưu trực tiếp vào thư viện ảnh.</p>
       <div class="target-grid" id="targetGrid"></div>
@@ -711,6 +748,188 @@
   const intensitySlider = document.getElementById('intensitySlider');
   const intensityValue = document.getElementById('intensityValue');
 
+  // ---------- manual grading (Light/Color panel) ----------
+  const GRADING_PARAMS = [
+    {key:'exposure',    label:'Exposure',    group:'Light', min:-500, max:500, toValue:v=>v/100, format:v=>(v/100).toFixed(2)},
+    {key:'contrast',    label:'Contrast',    group:'Light', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'highlights',  label:'Highlights',  group:'Light', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'shadows',     label:'Shadows',     group:'Light', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'whites',      label:'Whites',      group:'Light', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'blacks',      label:'Blacks',      group:'Light', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'temperature', label:'Temperature', group:'Color', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'tint',        label:'Tint',        group:'Color', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'vibrance',    label:'Vibrance',    group:'Color', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+    {key:'saturation',  label:'Saturation',  group:'Color', min:-100, max:100, toValue:v=>v,      format:v=>String(v)},
+  ];
+  let grading = {};
+  GRADING_PARAMS.forEach(p=>{ grading[p.key]=0; });
+
+  const gradingBlock = document.getElementById('gradingBlock');
+
+  function buildGradingUI(){
+    let html='';
+    ['Light','Color'].forEach(group=>{
+      html += `<details class="grading-group" open><summary>${group}</summary>`;
+      GRADING_PARAMS.filter(p=>p.group===group).forEach(p=>{
+        html += `
+          <div class="grading-row">
+            <span class="grading-label">${p.label}</span>
+            <input type="range" min="${p.min}" max="${p.max}" step="1" value="0" data-key="${p.key}">
+            <span class="grading-value" data-key="${p.key}">${p.format(0)}</span>
+          </div>`;
+      });
+      html += `</details>`;
+    });
+    html += `<button class="secondary" id="resetGradingBtn" type="button">Đặt lại chỉnh màu</button>`;
+    gradingBlock.innerHTML = html;
+
+    GRADING_PARAMS.forEach(p=>{
+      const input = gradingBlock.querySelector(`input[data-key="${p.key}"]`);
+      const valueEl = gradingBlock.querySelector(`.grading-value[data-key="${p.key}"]`);
+      input.addEventListener('input', ()=>{
+        const raw = Number(input.value);
+        grading[p.key] = p.toValue(raw);
+        valueEl.textContent = p.format(raw);
+        scheduleGradingRender();
+      });
+    });
+    gradingBlock.querySelector('#resetGradingBtn').addEventListener('click', ()=>{
+      GRADING_PARAMS.forEach(p=>{
+        grading[p.key]=0;
+        gradingBlock.querySelector(`input[data-key="${p.key}"]`).value = 0;
+        gradingBlock.querySelector(`.grading-value[data-key="${p.key}"]`).textContent = p.format(0);
+      });
+      scheduleGradingRender();
+    });
+  }
+  buildGradingUI();
+
+  function updateGradingEnabled(){
+    gradingBlock.classList.toggle('disabled', !targetImages.some(t=>t.baseImageData));
+  }
+
+  let gradingTimer=null;
+  function scheduleGradingRender(){
+    clearTimeout(gradingTimer);
+    gradingTimer = setTimeout(()=>{
+      targetImages.forEach(t=>{ if(t.baseImageData) paintTarget(t); });
+    }, 60);
+  }
+
+  function isGradingNeutral(g){
+    return GRADING_PARAMS.every(p=>g[p.key]===0);
+  }
+
+  function smoothstep(edge0, edge1, x){
+    const t = Math.min(1, Math.max(0, (x-edge0)/(edge1-edge0)));
+    return t*t*(3-2*t);
+  }
+
+  function rgbToHsl(r,g,b){
+    r/=255; g/=255; b/=255;
+    const max=Math.max(r,g,b), min=Math.min(r,g,b);
+    let h=0, s=0; const l=(max+min)/2;
+    const d = max-min;
+    if(d!==0){
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max){
+        case r: h=(g-b)/d + (g<b?6:0); break;
+        case g: h=(b-r)/d + 2; break;
+        default: h=(r-g)/d + 4; break;
+      }
+      h/=6;
+    }
+    return [h,s,l];
+  }
+  function hslToRgb(h,s,l){
+    if(s===0){ const v=l*255; return [v,v,v]; }
+    const hue2rgb=(p,q,t)=>{
+      if(t<0) t+=1; if(t>1) t-=1;
+      if(t<1/6) return p+(q-p)*6*t;
+      if(t<1/2) return q;
+      if(t<2/3) return p+(q-p)*(2/3-t)*6;
+      return p;
+    };
+    const q = l<0.5 ? l*(1+s) : l+s-l*s;
+    const p = 2*l-q;
+    return [hue2rgb(p,q,h+1/3)*255, hue2rgb(p,q,h)*255, hue2rgb(p,q,h-1/3)*255];
+  }
+
+  // Approximate, Lightroom-inspired (not bit-identical) tone/color adjustments.
+  function applyGrading(imageData, g){
+    const {width, height, data} = imageData;
+    const out = new ImageData(width, height);
+    const outData = out.data;
+    const exposureMul = Math.pow(2, g.exposure);
+    const warmT = g.temperature/100 * 0.35;
+    const tintT = g.tint/100 * 0.35;
+    const doWB = g.exposure!==0 || g.temperature!==0 || g.tint!==0;
+    const doTone = g.contrast!==0 || g.highlights!==0 || g.shadows!==0 || g.whites!==0 || g.blacks!==0;
+    const doColor = g.vibrance!==0 || g.saturation!==0;
+    const contrastC = g.contrast*2.55;
+    const contrastFactor = (259*(contrastC+255)) / (255*(259-contrastC));
+
+    for(let i=0;i<data.length;i+=4){
+      let r=data[i], gC=data[i+1], b=data[i+2];
+
+      if(doWB){
+        let rl=srgbToLinear(r), gl=srgbToLinear(gC), bl=srgbToLinear(b);
+        rl *= exposureMul*(1+warmT)*(1+tintT*0.15);
+        gl *= exposureMul*(1-tintT*0.5);
+        bl *= exposureMul*(1-warmT)*(1+tintT*0.15);
+        r = clamp255(linearToSrgb(rl));
+        gC = clamp255(linearToSrgb(gl));
+        b = clamp255(linearToSrgb(bl));
+      }
+
+      if(doTone){
+        if(g.contrast!==0){
+          r = clamp255(contrastFactor*(r-128)+128);
+          gC = clamp255(contrastFactor*(gC-128)+128);
+          b = clamp255(contrastFactor*(b-128)+128);
+        }
+        const y = (0.2126*r+0.7152*gC+0.0722*b)/255;
+        let delta = 0;
+        if(g.highlights!==0) delta += g.highlights/100*40*smoothstep(0.25,0.75,y);
+        if(g.shadows!==0)    delta += g.shadows/100*40*(1-smoothstep(0.25,0.75,y));
+        if(g.whites!==0)     delta += g.whites/100*50*smoothstep(0.55,1.0,y);
+        if(g.blacks!==0)     delta += g.blacks/100*50*(1-smoothstep(0.0,0.45,y));
+        if(delta!==0){
+          r = clamp255(r+delta); gC = clamp255(gC+delta); b = clamp255(b+delta);
+        }
+      }
+
+      if(doColor){
+        let [h,s,l] = rgbToHsl(r,gC,b);
+        if(g.saturation!==0) s = Math.min(1, Math.max(0, s*(1+g.saturation/100)));
+        if(g.vibrance!==0)   s = Math.min(1, Math.max(0, s + g.vibrance/100*(1-s)));
+        const rgb = hslToRgb(h,s,l);
+        r = clamp255(rgb[0]); gC = clamp255(rgb[1]); b = clamp255(rgb[2]);
+      }
+
+      outData[i]=r; outData[i+1]=gC; outData[i+2]=b; outData[i+3]=data[i+3];
+    }
+    return out;
+  }
+
+  function paintTarget(t){
+    if(!t.baseImageData || !t.prepared) return;
+    const outData = isGradingNeutral(grading) ? t.baseImageData : applyGrading(t.baseImageData, grading);
+    t.prepared.ctx.putImageData(outData, 0, 0);
+    const dataUrl = t.prepared.canvas.toDataURL('image/png');
+    const card = targetGrid.querySelector(`[data-id="${t.id}"]`);
+    if(card){
+      const resultImg = card.querySelector('.result-img');
+      resultImg.src = dataUrl;
+      const dlBtn = card.querySelector('.dl-btn');
+      dlBtn.disabled = false;
+      dlBtn.onclick = ()=>{
+        downloadCanvas(t.prepared.canvas, 'styled-'+t.name.replace(/\.[^.]+$/,'')+'.png');
+      };
+    }
+    updateGradingEnabled();
+  }
+
   let idCounter = 0;
 
   setupDropzone(tgtDropzone, tgtInput, async(files)=>{
@@ -748,6 +967,7 @@
         targetImages = targetImages.filter(x=>x.id!==t.id);
         renderTargetGrid();
         applyBtn.disabled = !canApply();
+        updateGradingEnabled();
       };
       targetGrid.appendChild(card);
     });
@@ -801,19 +1021,8 @@
       const [r,g,bl] = labToRgb(L,a,b);
       out.data[i*4]=r; out.data[i*4+1]=g; out.data[i*4+2]=bl; out.data[i*4+3]=255;
     }
-    t.prepared.ctx.putImageData(out, 0, 0);
-    const dataUrl = t.prepared.canvas.toDataURL('image/png');
-
-    const card = targetGrid.querySelector(`[data-id="${t.id}"]`);
-    if(card){
-      const resultImg = card.querySelector('.result-img');
-      resultImg.src = dataUrl;
-      const dlBtn = card.querySelector('.dl-btn');
-      dlBtn.disabled = false;
-      dlBtn.onclick = ()=>{
-        downloadCanvas(t.prepared.canvas, 'styled-'+t.name.replace(/\.[^.]+$/,'')+'.png');
-      };
-    }
+    t.baseImageData = out;
+    paintTarget(t);
   }
 
   function setCardState(t, state){ // 'processing' | 'error' | null
@@ -848,25 +1057,20 @@
       if(t.aiBlobUrl) URL.revokeObjectURL(t.aiBlobUrl);
       t.aiBlobUrl = URL.createObjectURL(blob);
       t.aiBlob = blob;
+      const img = await new Promise((resolve, reject)=>{
+        const im = new Image();
+        im.onload = ()=>resolve(im);
+        im.onerror = reject;
+        im.src = t.aiBlobUrl;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      t.prepared = {canvas, ctx};
+      t.baseImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       setCardState(t, null);
-      const card = targetGrid.querySelector(`[data-id="${t.id}"]`);
-      if(card){
-        card.querySelector('.result-img').src = t.aiBlobUrl;
-        const dlBtn = card.querySelector('.dl-btn');
-        dlBtn.disabled = false;
-        dlBtn.onclick = ()=>{
-          if (isIOS){
-            alert('Trên iPhone/iPad: chạm giữ vào ảnh "Sau" phía trên rồi chọn "Lưu vào Ảnh".');
-            return;
-          }
-          const a = document.createElement('a');
-          a.href = t.aiBlobUrl;
-          a.download = 'styled-'+t.name.replace(/\.[^.]+$/,'')+'.png';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        };
-      }
+      paintTarget(t);
     }catch(err){
       console.error(err);
       setCardState(t, 'error');
@@ -881,7 +1085,7 @@
       applyBtn.disabled = true;
       await Promise.all(targetImages.map(t=>applyAI(t)));
       applyBtn.disabled = !canApply();
-      downloadAllBtn.disabled = !targetImages.some(t=>t.aiBlob);
+      downloadAllBtn.disabled = !targetImages.some(t=>t.prepared);
     } else {
       targetImages.forEach(t=>{
         prepareTarget(t);
@@ -908,9 +1112,9 @@
       return;
     }
     const zip = new JSZip();
-    const ready = mode==='ai' ? targetImages.filter(t=>t.aiBlob) : targetImages.filter(t=>t.prepared);
+    const ready = targetImages.filter(t=>t.prepared);
     for(const t of ready){
-      const blob = mode==='ai' ? t.aiBlob : await new Promise(res=>t.prepared.canvas.toBlob(res));
+      const blob = await new Promise(res=>t.prepared.canvas.toBlob(res));
       zip.file('styled-'+t.name.replace(/\.[^.]+$/,'')+'.png', blob);
     }
     const content = await zip.generateAsync({type:'blob'});
