@@ -35,17 +35,24 @@ if not exist venv\Lib\site-packages\torch (
         set TORCH_ARGS=torch torchvision --index-url https://download.pytorch.org/whl/cu121
     )
 
-    venv\Scripts\python.exe -m pip install --upgrade pip
-    venv\Scripts\python.exe -m pip install !TORCH_ARGS!
+    REM --timeout/--retries: file torch rat nang (~2-3GB), mang cham/chap
+    REM chon se bi ReadTimeoutError neu dung mac dinh cua pip (thuong gap).
+    venv\Scripts\python.exe -m pip install !TORCH_ARGS! --timeout 180 --retries 5
     if errorlevel 1 (
-        echo [Loi] Cai torch that bai. Kiem tra ket noi mang roi chay lai file nay.
+        echo.
+        echo [Loi] Cai torch that bai ^(xem loi chi tiet o tren^).
+        echo Nguyen nhan thuong gap: mang cham/chap chon khi tai file torch ^(~2-3GB^),
+        echo firewall/antivirus chan, hoac mat ket noi giua chung.
+        echo Thu lai: chay lai file nay ^(da tang timeout + tu dong thu lai 5 lan^).
+        echo Neu van loi, thu doi sang wifi/mang khac roi chay lai.
         pause
         exit /b 1
     )
 
-    venv\Scripts\python.exe -m pip install -r requirements.txt
+    venv\Scripts\python.exe -m pip install -r requirements.txt --timeout 180 --retries 5
     if errorlevel 1 (
-        echo [Loi] Cai thu vien that bai. Kiem tra ket noi mang roi chay lai file nay.
+        echo.
+        echo [Loi] Cai thu vien that bai ^(xem loi chi tiet o tren^). Kiem tra ket noi mang roi chay lai file nay.
         pause
         exit /b 1
     )
